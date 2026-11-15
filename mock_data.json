@@ -1,0 +1,46 @@
+{
+    "latest": {
+        "device_id": "ESP32_PA_01",
+        "rtc_time": "2026-11-15 08:00:00",
+        "rtc_temp": 28.5,
+        "actuator_state": "PLAYING",
+        "current_track": "Track 01 - เพลงชาติ / ประชาสัมพันธ์เช้า"
+    },
+    "history": [
+        {
+            "date": "9 พ.ย.",
+            "count": 5,
+            "temp": 27.8
+        },
+        {
+            "date": "10 พ.ย.",
+            "count": 6,
+            "temp": 28.1
+        },
+        {
+            "date": "11 พ.ย.",
+            "count": 5,
+            "temp": 29.0
+        },
+        {
+            "date": "12 พ.ย.",
+            "count": 8,
+            "temp": 28.4
+        },
+        {
+            "date": "13 พ.ย.",
+            "count": 6,
+            "temp": 27.5
+        },
+        {
+            "date": "14 พ.ย.",
+            "count": 4,
+            "temp": 28.0
+        },
+        {
+            "date": "15 พ.ย.",
+            "count": 7,
+            "temp": 28.5
+        }
+    ]
+}

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart PA System Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #0f172a;
+            color: #f8fafc;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #38bdf8;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #1e293b;
+            padding: 16px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+
+        .card h3 {
+            margin: 0 0 8px;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+
+        .card .val {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #f1f5f9;
+        }
+
+        .status-ok {
+            color: #4ade80 !important;
+        }
+
+        .panel {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        button,
+        input,
+        select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: #fff;
+        }
+
+        button {
+            background: #0284c7;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0369a1;
+        }
+
+        .alert {
+            margin-top: 10px;
+            font-size: 0.85rem;
+            color: #facc15;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔊 ระบบประกาศเสียงตามสายอัตโนมัติ (ESP32 + RTC + DFPlayer)</h1>
+
+        <!-- ส่วนแสดงค่าล่าสุด -->
+        <div class="grid">
+            <div class="card">
+                <h3>เวลาจากโมดูล RTC DS3231</h3>
+                <div class="val" id="rtcTime">กำลังโหลด...</div>
+            </div>
+            <div class="card">
+                <h3>สถานะลำโพง PA / DFPlayer</h3>
+                <div class="val status-ok" id="playerState">กำลังโหลด...</div>
+            </div>
+            <div class="card">
+                <h3>แทร็กเสียงล่าสุด</h3>
+                <div class="val" id="currentTrack" style="font-size:1rem;">-</div>
+            </div>
+            <div class="card">
+                <h3>อุณหภูมิชิป RTC</h3>
+                <div class="val" id="rtcTemp">- °C</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <!-- กราฟย้อนหลังด้วย Chart.js -->
+            <div class="card">
+                <h3>📊 สถิติจำนวนครั้งที่ประกาศเสียงและอุณหภูมิย้อนหลัง 7 วัน</h3>
+                <canvas id="historyChart" height="140"></canvas>
+            </div>
+
+            <!-- หน้าตั้งค่า / สั่งงานและแจ้งเตือน -->
+            <div class="card">
+                <h3>⚙️ ตั้งเวลาประกาศ & สั่งงานด่วน</h3>
+                <label style="font-size:0.85rem;">เลือกไฟล์เสียง (MicroSD):</label>
+                <select id="trackSelect">
+                    <option value="1">Track 01 - เพลงชาติ / ข่าวเช้า</option>
+                    <option value="2">Track 02 - แจ้งเตือนพักเที่ยง</option>
+                    <option value="3">Track 03 - สัญญาณเลิกงาน / เลิกเรียน</option>
+                </select>
+                <label style="font-size:0.85rem; display:block; margin-top:10px;">ตั้งเวลาอัตโนมัติ (RTC):</label>
+                <input type="time" id="alarmTime" value="08:00">
+                <button onclick="saveSetting()">บันทึกการตั้งค่า / สั่งเล่นทันที</button>
+                <div class="alert" id="alertBox">สถานะ: อัปเดตข้อมูลอัตโนมัติทุก 10 วินาที</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        async function fetchDashboardData() {
+            try {
+                // ดึงข้อมูลผ่าน API / JSON ไม่ได้เขียนค่าตายตัวใน HTML
+                const res = await fetch('mock_data.json?t=' + new Date().getTime());
+                const data = await res.json();
+
+                document.getElementById('rtcTime').innerText = data.latest.rtc_time;
+                document.getElementById('playerState').innerText = data.latest.actuator_state;
+                document.getElementById('currentTrack').innerText = data.latest.current_track;
+                document.getElementById('rtcTemp').innerText = data.latest.rtc_temp + ' °C';
+
+                const labels = data.history.map(item => item.date);
+                const counts = data.history.map(item => item.count);
+                const temps = data.history.map(item => item.temp);
+
+                if (!chartInstance) {
+                    const ctx = document.getElementById('historyChart').getContext('2d');
+                    chartInstance = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                { label: 'จำนวนครั้งที่ประกาศ (ครั้ง/วัน)', data: counts, backgroundColor: '#38bdf8' },
+                                { label: 'อุณหภูมิ RTC (°C)', data: temps, type: 'line', borderColor: '#f43f5e', tension: 0.3 }
+                            ]
+                        },
+                        options: { responsive: true, plugins: { legend: { labels: { color: '#cbd5e1' } } } }
+                    });
+                } else {
+                    chartInstance.update();
+                }
+            } catch (err) {
+                console.error('Error fetching mock data:', err);
+            }
+        }
+
+        function saveSetting() {
+            const track = document.getElementById('trackSelect').options[document.getElementById('trackSelect').selectedIndex].text;
+            const time = document.getElementById('alarmTime').value;
+            document.getElementById('alertBox').innerText = `🔔 แจ้งเตือน: ตั้งเวลา ${time} น. (${track}) สำเร็จ!`;
+            document.getElementById('currentTrack').innerText = track;
+        }
+
+        // โหลดครั้งแรกและทำ Polling อัปเดตอัตโนมัติทุก 10 วินาที
+        fetchDashboardData();
+        setInterval(fetchDashboardData, 10000);
+    </script>
+</body>
+
+</html>
